@@ -7,6 +7,7 @@ import torch.nn. functional as F
 import torch.optim as optim
 import os
 import sys
+from tqdm import tqdm
 
 
 class Model(nn.Module):
@@ -77,11 +78,13 @@ class Model(nn.Module):
 
 
     def forward(self, x, y):
+        # print('model called')
         mu, logvar = self.encoder(x,y)
         z = self.reparameterize(mu,logvar)
-
+        # print(z.shape)
         # Class conditioning
         z = torch.cat((z, y.float()), dim=1)
+        # print(z.shape)
         pred = self.decoder(z)
         return pred, mu, logvar
 
@@ -118,14 +121,17 @@ def loss_function(x, recon_probs, mu, logvar):
     return recon_loss, kld
 
 
-def train(epoch, model, train_loader, optim,device):
+def train(epoch, model, train_loader,n_classes, optim,device):
     reconstruction_loss = 0
     kld_loss = 0
     total_loss = 0
-    for i,(x) in enumerate(train_loader):
+    print('epoch - ', epoch)
+    for (x, y) in tqdm(train_loader):
         # try:
-        label = torch.zeros((x.shape[0], 1))
-
+        x = x.unsqueeze(1)
+        label = np.zeros((x.shape[0], n_classes))
+        label[np.arange(x.shape[0]), y] = 1
+        label = torch.tensor(label)
         optim.zero_grad()   
         pred, mu, logvar = model(x.to(device),label.to(device))
         
