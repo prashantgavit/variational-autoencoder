@@ -1,0 +1,2 @@
+# Include all JSON files in the omniglot assets directory
+recursive-include VAE/meta_dataset/assets/omniglot *.json
