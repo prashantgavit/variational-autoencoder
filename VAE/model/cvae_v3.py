@@ -20,7 +20,9 @@ class Model(nn.Module):
 
         # For encode
         self.conv1 = nn.Conv2d(2, 16, kernel_size=5, stride=2)
+        self.bn1 = nn.BatchNorm2d(16)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=5, stride=2)
+        self.bn2 = nn.BatchNorm2d(32)
         self.linear1 = nn.Linear(24*24*32,300)
         self.mu = nn.Linear(300, self.latent_size)
         self.logvar = nn.Linear(300, self.latent_size)
@@ -32,10 +34,12 @@ class Model(nn.Module):
         # self.conv4 = nn.ConvTranspose2d(16, 1, kernel_size=5, stride=2)
         # self.conv5 = nn.ConvTranspose2d(1, 1, kernel_size=4)
         
-
         self.deconv1 = nn.ConvTranspose2d(32, 32, kernel_size=5, stride=2, padding=0)  # 4 -> 11
+        self.dbn1 = nn.BatchNorm2d(32)
         self.deconv2 = nn.ConvTranspose2d(32, 16, kernel_size=5, stride=2, padding=0)  # 11 -> 25
+        self.dbn2 = nn.BatchNorm2d(16)
         self.deconv3 = nn.ConvTranspose2d(16,  8, kernel_size=5, stride=2, padding=0)  # 25 -> 53
+        self.dbn3 = nn.BatchNorm2d(8)
         self.deconv4 = nn.ConvTranspose2d( 8,  1, kernel_size=1, stride=2, padding=0)  # 53 -> 105
 
 
@@ -44,8 +48,8 @@ class Model(nn.Module):
         y = torch.ones(x.shape).to(self.device)*y
         t = torch.cat((x,y),dim=1)
         
-        t = F.relu(self.conv1(t))
-        t = F.relu(self.conv2(t))
+        t = F.relu(self.bn1(self.conv1(t)))
+        t = F.relu(self.bn2(self.conv2(t)))
         t = t.reshape((x.shape[0], -1))
         
         t = F.relu(self.linear1(t))
@@ -69,9 +73,9 @@ class Model(nn.Module):
         # t = F.relu(self.conv4(t))
         # t = F.relu(self.conv5(t))
 
-        t = F.relu(self.deconv1(t))          # [64,32,11,11]
-        t = F.relu(self.deconv2(t))          # [64,16,25,25]
-        t = F.relu(self.deconv3(t))          # [64, 8,53,53]
+        t = F.relu(self.dbn1(self.deconv1(t)))          # [64,32,11,11]
+        t = F.relu(self.dbn2(self.deconv2(t)))          # [64,16,25,25]
+        t = F.relu(self.dbn3(self.deconv3(t)))          # [64, 8,53,53]
         t = self.deconv4(t)   
         probs = torch.sigmoid(t)            # [B,1,105,105], probabilities
         return probs
@@ -136,7 +140,7 @@ def train(epoch, model, train_loader,n_classes, optim,device):
         pred, mu, logvar = model(x.to(device),label.to(device))
         
         recon_loss, kld = loss_function(x.to(device),pred, mu, logvar)
-        loss = recon_loss + kld
+        loss = 10*recon_loss +  kld
         loss.backward()
         optim.step()
 
@@ -153,31 +157,29 @@ def train(epoch, model, train_loader,n_classes, optim,device):
     total_loss /= len(train_loader.dataset)
     return total_loss, kld_loss,reconstruction_loss
 
-def test(epoch, model, test_loader,device):
+def test(epoch, model, test_loader,n_classes,device):
     reconstruction_loss = 0
     kld_loss = 0
     total_loss = 0
     with torch.no_grad():
         for i,(x,y) in enumerate(test_loader):
-            try:
-                label = np.zeros((x.shape[0], 10))
-                label[np.arange(x.shape[0]), y] = 1
-                label = torch.tensor(label)
+            x = x.unsqueeze(1)
+            label = np.zeros((x.shape[0], n_classes))
+            label[np.arange(x.shape[0]), y] = 1
+            label = torch.tensor(label)
 
-                pred, mu, logvar = model(x.to(device),label.to(device))
-                recon_loss, kld = loss_function(x.to(device),pred, mu, logvar)
-                loss = recon_loss + kld
+            pred, mu, logvar = model(x.to(device),label.to(device))
+            recon_loss, kld = loss_function(x.to(device),pred, mu, logvar)
+            loss = recon_loss + kld
 
-                total_loss += loss.cpu().data.numpy()*x.shape[0]
-                reconstruction_loss += recon_loss.cpu().data.numpy()*x.shape[0]
-                kld_loss += kld.cpu().data.numpy()*x.shape[0]
-                if i == 0:
-                    # print("gr:", x[0,0,:5,:5])
-                    # print("pred:", pred[0,0,:5,:5])
-                    plot(epoch, pred.cpu().data.numpy(), y.cpu().data.numpy())
-            except Exception as e:
-                torch.cuda.empty_cache()
-                continue
+            total_loss += loss.cpu().data.numpy()*x.shape[0]
+            reconstruction_loss += recon_loss.cpu().data.numpy()*x.shape[0]
+            kld_loss += kld.cpu().data.numpy()*x.shape[0]
+            # if i == 0:
+                # print("gr:", x[0,0,:5,:5])
+                # print("pred:", pred[0,0,:5,:5])
+                # plot(epoch, pred.cpu().data.numpy(), y.cpu().data.numpy())
+
     reconstruction_loss /= len(test_loader.dataset)
     kld_loss /= len(test_loader.dataset)
     total_loss /= len(test_loader.dataset)
