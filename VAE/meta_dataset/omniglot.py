@@ -1,10 +1,10 @@
-from  meta_dataset.base_dataset import ClassDataset,Dataset
+from  VAE.meta_dataset.base_dataset import ClassDataset,Dataset
 from torchvision.datasets.utils import list_dir, download_url
 import os
 import json
 from torch.utils.data import Dataset as torch_dataset
 
-from meta_dataset.utils import get_asset
+from VAE.meta_dataset.utils import get_asset
 import glob
 import h5py
 from PIL import Image, ImageOps
